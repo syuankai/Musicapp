@@ -1,0 +1,6 @@
+{
+  "name": "AeroPlayer",
+  "description": "A beautiful glassmorphic media player that plays MP3/MP4 files and features dual-decoder switching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
