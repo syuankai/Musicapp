@@ -134,6 +134,13 @@ class PlayerViewModel : ViewModel() {
     private val _youtubeResolveError = MutableStateFlow<String?>(null)
     val youtubeResolveError: StateFlow<String?> = _youtubeResolveError.asStateFlow()
 
+    private val _backgroundType = MutableStateFlow("gradient") // "gradient" or "simple"
+    val backgroundType: StateFlow<String> = _backgroundType.asStateFlow()
+
+    fun setBackgroundType(type: String) {
+        _backgroundType.value = type
+    }
+
     var player: ExoPlayer? = null
         private set
 
@@ -296,6 +303,24 @@ class PlayerViewModel : ViewModel() {
                     _youtubeResolveError.value = "解析 YouTube 失敗，請重試"
                 }
             }
+        } else if (mediaItem.id.startsWith("soundcloud_")) {
+            _isResolvingYoutube.value = true
+            _youtubeResolveError.value = null
+            viewModelScope.launch {
+                val playableUrl = SoundCloudExtractor.fetchPlayableUrl(mediaItem.url)
+                _isResolvingYoutube.value = false
+                if (playableUrl != null) {
+                    val resolvedItem = mediaItem.copy(url = playableUrl)
+                    _currentMediaItem.value = resolvedItem
+                    player?.let { p ->
+                        p.setMediaItem(MediaItem.fromUri(playableUrl))
+                        p.prepare()
+                        p.play()
+                    }
+                } else {
+                    _youtubeResolveError.value = "解析 SoundCloud 串流連結失敗"
+                }
+            }
         } else {
             _isResolvingYoutube.value = false
             _youtubeResolveError.value = null
@@ -348,6 +373,51 @@ class PlayerViewModel : ViewModel() {
             } else {
                 _youtubeResolveError.value = "解析失敗，請檢查網路或更換連結"
                 onError("解析失敗，請檢查網路或更換連結")
+            }
+        }
+    }
+
+    fun addSoundCloudItem(
+        url: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        if (!SoundCloudExtractor.isSoundCloudUrl(url)) {
+            onError("無效的 SoundCloud 連結")
+            return
+        }
+        _isResolvingYoutube.value = true
+        _youtubeResolveError.value = null
+        viewModelScope.launch {
+            val tracks = SoundCloudExtractor.resolve(url)
+            _isResolvingYoutube.value = false
+            if (tracks.isNotEmpty()) {
+                val updatedList = _playlist.value.toMutableList()
+                var firstAddedIdx = -1
+                tracks.forEach { track ->
+                    val newItem = MediaItemModel(
+                        id = track.id,
+                        title = track.title,
+                        artist = track.artist,
+                        url = track.streamUrl,
+                        isVideo = false,
+                        isLocal = false
+                    )
+                    updatedList.add(newItem)
+                    if (firstAddedIdx == -1) {
+                        firstAddedIdx = updatedList.size - 1
+                    }
+                }
+                _playlist.value = updatedList
+
+                // Play the first newly added item
+                if (firstAddedIdx != -1) {
+                    playItem(updatedList[firstAddedIdx], firstAddedIdx)
+                }
+                onSuccess()
+            } else {
+                _youtubeResolveError.value = "解析 SoundCloud 失敗，請確認網址或網路連線"
+                onError("解析 SoundCloud 失敗，請確認網址或網路連線")
             }
         }
     }

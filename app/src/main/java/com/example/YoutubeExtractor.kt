@@ -33,10 +33,12 @@ object YoutubeExtractor {
 
     // Public list of resilient Piped API instances to cycle through in case of rate-limiting
     private val pipedInstances = listOf(
-        "https://api.piped.yt",
-        "https://pipedapi.kavin.rocks",
-        "https://piped-api.lunar.icu",
-        "https://pipedapi.moe.net"
+        "https://pipedapi.adminforge.de",
+        "https://piped-api.garudalinux.org",
+        "https://pipedapi.swg.rocks",
+        "https://pipedapi.colby.cafe",
+        "https://pipedapi.hostux.net",
+        "https://pipedapi.suyu.sh"
     )
 
     fun extractVideoId(input: String): String? {

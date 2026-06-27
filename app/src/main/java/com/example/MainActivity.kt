@@ -51,6 +51,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeveloperMode
@@ -159,9 +160,12 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     val activeAudioDecoder by viewModel.activeAudioDecoder.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
+    val backgroundType by viewModel.backgroundType.collectAsState()
 
     var showCodecListSheet by remember { mutableStateOf(false) }
     var videoScaleMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var showSettingsPage by remember { mutableStateOf(false) }
+    var isFullScreen by remember { mutableStateOf(false) }
 
     // Media picking launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -178,19 +182,27 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Root Blurred Gradient Wallpaper
-        Image(
-            painter = painterResource(id = R.drawable.img_glass_background_1782480821595),
-            contentDescription = "Background Gradient",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        // 1. Root Wallpaper (Supporting both gradient and simple solid dark mode)
+        if (backgroundType == "simple") {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF0F111A))
+            )
+        } else {
+            Image(
+                painter = painterResource(id = R.drawable.img_glass_background_1782480821595),
+                contentDescription = "Background Gradient",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
 
         // Semi-transparent overlay to ensure premium readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(Color.Black.copy(alpha = if (backgroundType == "simple") 0.15f else 0.45f))
         )
 
         // Main Scaffold layout
@@ -217,19 +229,229 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                 // Header Panel
                 HeaderRow(
                     onImportClick = { filePickerLauncher.launch("*/*") },
-                    onShowCodecSheet = { showCodecListSheet = true }
+                    onSettingsClick = { showSettingsPage = !showSettingsPage }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Scrollable main body
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                if (showSettingsPage) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // 1. Settings Back Navigation and Info card
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { showSettingsPage = false },
+                                    modifier = Modifier
+                                        .background(Color.White.copy(alpha = 0.08f), CircleShape)
+                                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), CircleShape)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = Color.White
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "系統設定 Settings",
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "設定解碼分配、視覺主題與探索解碼晶片",
+                                        color = Color.White.copy(alpha = 0.5f),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // 2. Decoder Preference Configuration
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "解碼並用設定 (Codec Engine)",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "變更解碼晶片調配，優先調用所選的硬體加速或軟體解碼晶片",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = 0.03f))
+                                ) {
+                                    val options = listOf("default" to "系統預設", "hardware" to "硬體加速", "software" to "軟體解碼")
+                                    options.forEach { (type, label) ->
+                                        val isSelected = preferDecoderType == type
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+                                                )
+                                                .clickable { viewModel.setDecoderPreference(context, type) }
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                modifier = Modifier.testTag("decoder_pref_$type")
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. Background Theme Style Card
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "背景視覺風格 (Background Style)",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "選擇您偏好的播放器背景，兩者皆支援磨砂毛玻璃(Blur)動態色彩模糊質感",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = 0.03f))
+                                ) {
+                                    val bgOptions = listOf("gradient" to "炫彩漸層", "simple" to "極簡深灰")
+                                    bgOptions.forEach { (type, label) ->
+                                        val isSelected = backgroundType == type
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+                                                )
+                                                .clickable { viewModel.setBackgroundType(type) }
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. Tech codec database card
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "核心解碼晶片庫 (Decoder Library)",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "查看此 Android 裝置核心所支援的全部 MediaCodec 硬體與軟體解碼晶片清單",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+
+                                Button(
+                                    onClick = { showCodecListSheet = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.White.copy(alpha = 0.1f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Hardware,
+                                        contentDescription = "Codecs",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "開啟本機解碼晶片清單",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        // 5. About App Card
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "關於 Aero Glass Player",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "版本：v1.2.0\n獨特磨砂毛玻璃質感的多媒體播放器，專為 Android 打造。搭載本機高畫質解碼優先級管理，並內建 YouTube 及 SoundCloud 免下載高速雲端串流解析引擎。",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                     
                     // Main Media Screen (Audio Visualizer or Video Surface with cinematic ambient mode)
                     item {
@@ -251,96 +473,136 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                             if (currentMediaItem?.isVideo == true && viewModel.player != null) {
                                 // MP4 Video Renderer Area with dynamic backing glow
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    // 1. Cinematic Background glow matching active video pixels
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(16.dp)
-                                            .background(
-                                                Brush.radialGradient(
-                                                    colors = listOf(ambientColorCompose, Color.Transparent),
-                                                    radius = 350f
-                                                )
+                                    if (isFullScreen) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "全螢幕播放中...",
+                                                color = Color.White.copy(alpha = 0.6f),
+                                                fontSize = 14.sp
                                             )
-                                    )
+                                        }
+                                    } else {
+                                        // 1. Cinematic Background glow matching active video pixels
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .blur(16.dp)
+                                                .background(
+                                                    Brush.radialGradient(
+                                                        colors = listOf(ambientColorCompose, Color.Transparent),
+                                                        radius = 350f
+                                                    )
+                                                )
+                                        )
 
-                                    var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
+                                        var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
 
-                                    // Real-time video frame pixel analysis
-                                    LaunchedEffect(isPlaying, currentMediaItem) {
-                                        while (isPlaying) {
-                                            delay(180) // Analysis interval
-                                            textureViewRef?.let { tv ->
-                                                try {
-                                                    val bitmap = tv.getBitmap(8, 8)
-                                                    if (bitmap != null) {
-                                                        var rSum = 0L
-                                                        var gSum = 0L
-                                                        var bSum = 0L
-                                                        val pixels = IntArray(64)
-                                                        bitmap.getPixels(pixels, 0, 8, 0, 0, 8, 8)
-                                                        for (pixel in pixels) {
-                                                            rSum += (pixel shr 16) and 0xFF
-                                                            gSum += (pixel shr 8) and 0xFF
-                                                            bSum += pixel and 0xFF
+                                        // Real-time video frame pixel analysis
+                                        LaunchedEffect(isPlaying, currentMediaItem) {
+                                            while (isPlaying) {
+                                                delay(180) // Analysis interval
+                                                textureViewRef?.let { tv ->
+                                                    try {
+                                                        val bitmap = tv.getBitmap(8, 8)
+                                                        if (bitmap != null) {
+                                                            var rSum = 0L
+                                                            var gSum = 0L
+                                                            var bSum = 0L
+                                                            val pixels = IntArray(64)
+                                                            bitmap.getPixels(pixels, 0, 8, 0, 0, 8, 8)
+                                                            for (pixel in pixels) {
+                                                                rSum += (pixel shr 16) and 0xFF
+                                                                gSum += (pixel shr 8) and 0xFF
+                                                                bSum += pixel and 0xFF
+                                                            }
+                                                            val avgR = (rSum / 64).toInt().coerceIn(0, 255)
+                                                            val avgG = (gSum / 64).toInt().coerceIn(0, 255)
+                                                            val avgB = (bSum / 64).toInt().coerceIn(0, 255)
+                                                            viewModel.updateAmbientColor(avgR, avgG, avgB)
                                                         }
-                                                        val avgR = (rSum / 64).toInt().coerceIn(0, 255)
-                                                        val avgG = (gSum / 64).toInt().coerceIn(0, 255)
-                                                        val avgB = (bSum / 64).toInt().coerceIn(0, 255)
-                                                        viewModel.updateAmbientColor(avgR, avgG, avgB)
+                                                    } catch (e: Exception) {
+                                                        e.printStackTrace()
                                                     }
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
                                                 }
                                             }
                                         }
-                                    }
 
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            TextureView(ctx).apply {
-                                                viewModel.player?.setVideoTextureView(this)
-                                                textureViewRef = this
-                                            }
-                                        },
-                                        update = { textureView ->
-                                            viewModel.player?.setVideoTextureView(textureView)
-                                            textureViewRef = textureView
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(16.dp))
-                                    )
-                                    
-                                    // Video Resize Toggle Overlay
-                                    Row(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                                            .clickable {
-                                                videoScaleMode = if (videoScaleMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
-                                                    AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                                } else {
-                                                    AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                TextureView(ctx).apply {
+                                                    viewModel.player?.setVideoTextureView(this)
+                                                    textureViewRef = this
                                                 }
                                             },
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "Aspect Ratio",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(14.dp)
+                                            update = { textureView ->
+                                                viewModel.player?.setVideoTextureView(textureView)
+                                                textureViewRef = textureView
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(RoundedCornerShape(16.dp))
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = if (videoScaleMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) "適應" else "填滿",
-                                            color = Color.White,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        
+                                        // Video Resize Toggle Overlay
+                                        Row(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(8.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                                .clickable {
+                                                    videoScaleMode = if (videoScaleMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+                                                        AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                                    } else {
+                                                        AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                                    }
+                                                },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Settings,
+                                                contentDescription = "Aspect Ratio",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (videoScaleMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) "適應" else "填滿",
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        // Full Screen Toggle Overlay
+                                        Row(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(8.dp)
+                                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                                .clickable { isFullScreen = true },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Movie,
+                                                contentDescription = "Full Screen",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "全螢幕",
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -504,59 +766,6 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                     ) {
                                         Text("視訊解碼:", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
                                         Text(videoDec, color = Color(0xFFD0BCFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("active_video_decoder"))
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Codec Selection Engine (並用解碼器選項)
-                    item {
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "解碼並用設定 (Codec Engine)",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "更改解碼分配，重構 MediaCodec 的硬體/軟體解碼優先級",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(bottom = 10.dp)
-                            )
-
-                            // Glass segmented selection buttons
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(
-                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-                                        RoundedCornerShape(12.dp)
-                                    )
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White.copy(alpha = 0.03f))
-                            ) {
-                                val options = listOf("default" to "系統預設", "hardware" to "硬體加速", "software" to "軟體解碼")
-                                options.forEach { (type, label) ->
-                                    val isSelected = preferDecoderType == type
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .background(
-                                                if (isSelected) Color.White.copy(alpha = 0.15f) else Color.Transparent
-                                            )
-                                            .clickable { viewModel.setDecoderPreference(context, type) }
-                                            .padding(vertical = 12.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            modifier = Modifier.testTag("decoder_pref_$type")
-                                        )
                                     }
                                 }
                             }
@@ -1173,6 +1382,119 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                         }
                     }
 
+                    // SoundCloud Import Card
+                    item {
+                        var soundcloudUrl by remember { mutableStateOf("") }
+                        val isResolvingSoundcloud by viewModel.isResolvingYoutube.collectAsState()
+                        val soundcloudResolveError by viewModel.youtubeResolveError.collectAsState()
+                        
+                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Audiotrack,
+                                        contentDescription = "SoundCloud Icon",
+                                        tint = Color(0xFFFF5500),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "SoundCloud 音樂匯入",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "貼上 SoundCloud 的單首歌曲或播放清單(Sets)網址，即可一鍵載入待播清單串流播放！",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = soundcloudUrl,
+                                    onValueChange = { soundcloudUrl = it },
+                                    label = { Text("貼上 SoundCloud 網址", color = Color.White.copy(alpha = 0.6f)) },
+                                    placeholder = { Text("https://soundcloud.com/...", color = Color.White.copy(alpha = 0.3f)) },
+                                    singleLine = true,
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
+                                    enabled = !isResolvingSoundcloud,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("soundcloud_url_input"),
+                                    trailingIcon = {
+                                        if (soundcloudUrl.isNotEmpty()) {
+                                            IconButton(onClick = { soundcloudUrl = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Clear",
+                                                    tint = Color.White.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Button(
+                                onClick = {
+                                    if (soundcloudUrl.isNotBlank()) {
+                                        viewModel.addSoundCloudItem(
+                                            url = soundcloudUrl,
+                                            onSuccess = {
+                                                soundcloudUrl = ""
+                                            },
+                                            onError = {}
+                                        )
+                                    }
+                                },
+                                enabled = soundcloudUrl.isNotBlank() && !isResolvingSoundcloud,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFF5500),
+                                    disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("soundcloud_add_button"),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isResolvingSoundcloud && soundcloudUrl.isNotEmpty()) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("串流解析中...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Load Stream",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("載入 SoundCloud 串流", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
                     // Dynamic Playlist Queue
                     item {
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -1252,6 +1574,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                             )
                                             val subtitleText = when {
                                                 item.id.startsWith("youtube_") -> "YouTube 串流 • ${item.artist}"
+                                                item.id.startsWith("soundcloud_") -> "SoundCloud 串流 • ${item.artist}"
                                                 item.isLocal -> "本機匯入 • ${item.artist}"
                                                 else -> "串流媒體 • ${item.artist}"
                                             }
@@ -1276,6 +1599,139 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Full-Screen Video Over-Everything Layer
+    if (isFullScreen) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { /* prevent clicks passing through */ },
+            contentAlignment = Alignment.Center
+        ) {
+            var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
+            AndroidView(
+                factory = { ctx ->
+                    TextureView(ctx).apply {
+                        viewModel.player?.setVideoTextureView(this)
+                        textureViewRef = this
+                    }
+                },
+                update = { textureView ->
+                    viewModel.player?.setVideoTextureView(textureView)
+                    textureViewRef = textureView
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Auto-hiding full screen controls
+            var showControls by remember { mutableStateOf(true) }
+            LaunchedEffect(showControls) {
+                if (showControls) {
+                    delay(4000)
+                    showControls = false
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { showControls = !showControls }
+            ) {
+                AnimatedVisibility(
+                    visible = showControls,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        // Title / Metadata info at Top Start
+                        Text(
+                            text = currentMediaItem?.title ?: "",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(24.dp)
+                                .statusBarsPadding()
+                        )
+
+                        // Close/Exit Full Screen Button at Top End
+                        IconButton(
+                            onClick = { isFullScreen = false },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .statusBarsPadding()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Exit Full Screen",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+
+                        // Play/Pause Center Action
+                        IconButton(
+                            onClick = { viewModel.playPause() },
+                            modifier = Modifier.align(Alignment.Center)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Play/Pause",
+                                tint = Color.White,
+                                modifier = Modifier.size(64.dp)
+                            )
+                        }
+
+                        // Bottom Media Control Bar with Slider
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(24.dp)
+                                .navigationBarsPadding()
+                        ) {
+                            Slider(
+                                value = currentTime.toFloat(),
+                                onValueChange = { viewModel.seekTo(it.toLong()) },
+                                valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color.White,
+                                    activeTrackColor = Color(0xFFEFB8C8),
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = formatTime(currentTime),
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = formatTime(duration),
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -1399,6 +1855,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
         }
     }
 }
+}
 
 // ---------------- Reusable Glass Components ----------------
 
@@ -1433,7 +1890,7 @@ fun GlassCard(
 @Composable
 fun HeaderRow(
     onImportClick: () -> Unit,
-    onShowCodecSheet: () -> Unit
+    onSettingsClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -1469,15 +1926,15 @@ fun HeaderRow(
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(
-                onClick = onShowCodecSheet,
+                onClick = onSettingsClick,
                 modifier = Modifier
                     .background(Color.White.copy(alpha = 0.08f), CircleShape)
                     .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), CircleShape)
-                    .testTag("tech_sheet_button")
+                    .testTag("settings_button")
             ) {
                 Icon(
-                    imageVector = Icons.Default.Hardware,
-                    contentDescription = "Device Codecs Info",
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "System Settings",
                     tint = Color.White
                 )
             }
