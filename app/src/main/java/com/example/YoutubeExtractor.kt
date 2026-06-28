@@ -32,7 +32,7 @@ object YoutubeExtractor {
         .build()
 
     // Public list of resilient Piped API instances to cycle through in case of rate-limiting
-    private val pipedInstances = listOf(
+    private val pipedInstances = mutableListOf(
         "https://pipedapi.kavin.rocks",
         "https://api.piped.yt",
         "https://pipedapi.adminforge.de",
@@ -43,6 +43,14 @@ object YoutubeExtractor {
         "https://pipedapi.hostux.net",
         "https://pipedapi.suyu.sh"
     )
+
+    fun reportFailure(instance: String) {
+        synchronized(pipedInstances) {
+            if (pipedInstances.remove(instance)) {
+                pipedInstances.add(instance)
+            }
+        }
+    }
 
     fun extractVideoId(input: String): String? {
         val trimmed = input.trim()
@@ -87,7 +95,8 @@ object YoutubeExtractor {
 
     suspend fun search(query: String): List<YoutubeSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<YoutubeSearchResult>()
-        for (baseInstance in pipedInstances) {
+        val instancesCopy = synchronized(pipedInstances) { pipedInstances.toList() }
+        for (baseInstance in instancesCopy) {
             val encodedQuery = Uri.encode(query)
             val url = "$baseInstance/search?q=$encodedQuery&filter=all"
             val request = Request.Builder()
@@ -97,9 +106,15 @@ object YoutubeExtractor {
 
             try {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
+                    if (!response.isSuccessful) {
+                        reportFailure(baseInstance)
+                        return@use
+                    }
 
-                    val responseBody = response.body?.string() ?: return@use
+                    val responseBody = response.body?.string() ?: run {
+                        reportFailure(baseInstance)
+                        return@use
+                    }
                     val json = JSONObject(responseBody)
                     val items = json.optJSONArray("items") ?: return@use
 
@@ -145,14 +160,15 @@ object YoutubeExtractor {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Silently fallback to next instance
+                reportFailure(baseInstance)
             }
         }
         return@withContext results
     }
 
     suspend fun fetchStream(videoId: String, isVideoMode: Boolean): ExtractedStream? = withContext(Dispatchers.IO) {
-        for (baseInstance in pipedInstances) {
+        val instancesCopy = synchronized(pipedInstances) { pipedInstances.toList() }
+        for (baseInstance in instancesCopy) {
             val url = "$baseInstance/streams/$videoId"
             val request = Request.Builder()
                 .url(url)
@@ -161,9 +177,15 @@ object YoutubeExtractor {
 
             try {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
+                    if (!response.isSuccessful) {
+                        reportFailure(baseInstance)
+                        return@use
+                    }
 
-                    val responseBody = response.body?.string() ?: return@use
+                    val responseBody = response.body?.string() ?: run {
+                        reportFailure(baseInstance)
+                        return@use
+                    }
                     val json = JSONObject(responseBody)
 
                     val title = json.optString("title", "YouTube Track")
@@ -244,7 +266,7 @@ object YoutubeExtractor {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Fail silently and try the next instance in the resilient fallback loop
+                reportFailure(baseInstance)
             }
         }
         return@withContext null
