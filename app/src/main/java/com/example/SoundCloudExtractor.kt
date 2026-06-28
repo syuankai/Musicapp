@@ -23,6 +23,72 @@ object SoundCloudExtractor {
         .build()
 
     private const val CLIENT_ID = "a3e059563d7fd3372b49b37f00a00bcf"
+    private var activeClientId: String = CLIENT_ID
+
+    private suspend fun getOrFetchClientId(): String = withContext(Dispatchers.IO) {
+        if (activeClientId != CLIENT_ID) return@withContext activeClientId
+
+        val request = Request.Builder()
+            .url("https://soundcloud.com")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+            .build()
+        
+        try {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val html = response.body?.string() ?: ""
+                    
+                    // Find script assets from sndcdn.com
+                    val scriptRegex = """<script[^>]+src="([^"]+sndcdn\.com/assets/[^"]+\.js)"""".toRegex()
+                    val scriptUrls = scriptRegex.findAll(html)
+                        .map { it.groupValues[1] }
+                        .toList()
+                    
+                    // Search JS files from end as app scripts are usually at the bottom
+                    for (scriptUrl in scriptUrls.reversed()) {
+                        val jsRequest = Request.Builder()
+                            .url(scriptUrl)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+                            .build()
+                        try {
+                            client.newCall(jsRequest).execute().use { jsRes ->
+                                if (jsRes.isSuccessful) {
+                                    val jsCode = jsRes.body?.string() ?: ""
+                                    
+                                    // Match standard 32-char client_id
+                                    val clientIdRegex = """client_id\s*:\s*"([a-zA-Z0-9]{32})"""".toRegex()
+                                    val match = clientIdRegex.find(jsCode)
+                                    if (match != null) {
+                                        val foundId = match.groupValues[1]
+                                        if (foundId.isNotEmpty()) {
+                                            activeClientId = foundId
+                                            return@withContext foundId
+                                        }
+                                    }
+                                    
+                                    val altRegex = """client_id\s*=\s*"([a-zA-Z0-9]{32})"""".toRegex()
+                                    val altMatch = altRegex.find(jsCode)
+                                    if (altMatch != null) {
+                                        val foundId = altMatch.groupValues[1]
+                                        if (foundId.isNotEmpty()) {
+                                            activeClientId = foundId
+                                            return@withContext foundId
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        return@withContext activeClientId
+    }
 
     fun isSoundCloudUrl(url: String): Boolean {
         val trimmed = url.trim()
@@ -32,7 +98,8 @@ object SoundCloudExtractor {
     suspend fun resolve(url: String): List<SoundCloudTrack> = withContext(Dispatchers.IO) {
         val tracksList = mutableListOf<SoundCloudTrack>()
         val encodedUrl = Uri.encode(url.trim())
-        val resolveUrl = "https://api-v2.soundcloud.com/resolve?url=$encodedUrl&client_id=$CLIENT_ID"
+        val clientId = getOrFetchClientId()
+        val resolveUrl = "https://api-v2.soundcloud.com/resolve?url=$encodedUrl&client_id=$clientId"
         
         val request = Request.Builder()
             .url(resolveUrl)
@@ -81,7 +148,8 @@ object SoundCloudExtractor {
     }
 
     private suspend fun fetchFullTrack(trackId: Long): SoundCloudTrack? = withContext(Dispatchers.IO) {
-        val url = "https://api-v2.soundcloud.com/tracks/$trackId?client_id=$CLIENT_ID"
+        val clientId = getOrFetchClientId()
+        val url = "https://api-v2.soundcloud.com/tracks/$trackId?client_id=$clientId"
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
@@ -152,10 +220,11 @@ object SoundCloudExtractor {
     }
 
     suspend fun fetchPlayableUrl(transcodingUrl: String): String? = withContext(Dispatchers.IO) {
+        val clientId = getOrFetchClientId()
         val urlWithClient = if (transcodingUrl.contains("?")) {
-            "$transcodingUrl&client_id=$CLIENT_ID"
+            "$transcodingUrl&client_id=$clientId"
         } else {
-            "$transcodingUrl?client_id=$CLIENT_ID"
+            "$transcodingUrl?client_id=$clientId"
         }
         val request = Request.Builder()
             .url(urlWithClient)

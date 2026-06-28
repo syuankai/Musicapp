@@ -78,6 +78,10 @@ val DEMO_PLAYLIST = listOf(
 @OptIn(UnstableApi::class)
 class PlayerViewModel : ViewModel() {
 
+    companion object {
+        var activeSession: androidx.media3.session.MediaSession? = null
+    }
+
     private val _playlist = MutableStateFlow<List<MediaItemModel>>(DEMO_PLAYLIST)
     val playlist: StateFlow<List<MediaItemModel>> = _playlist.asStateFlow()
 
@@ -141,8 +145,29 @@ class PlayerViewModel : ViewModel() {
         _backgroundType.value = type
     }
 
+    private val _selectedWallpaper = MutableStateFlow<String>("default")
+    val selectedWallpaper: StateFlow<String> = _selectedWallpaper.asStateFlow()
+
+    fun setSelectedWallpaper(wallpaper: String) {
+        _selectedWallpaper.value = wallpaper
+    }
+
     var player: ExoPlayer? = null
         private set
+
+    var mediaSession: androidx.media3.session.MediaSession? = null
+        private set
+
+    private fun createMediaItem(model: MediaItemModel, url: String): MediaItem {
+        val metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(model.title)
+            .setArtist(model.artist)
+            .build()
+        return MediaItem.Builder()
+            .setUri(url)
+            .setMediaMetadata(metadata)
+            .build()
+    }
 
     private var progressJob: Job? = null
     private var lastPosition: Long = 0L
@@ -226,12 +251,19 @@ class PlayerViewModel : ViewModel() {
 
         player = newPlayer
 
+        try {
+            mediaSession?.release()
+            mediaSession = androidx.media3.session.MediaSession.Builder(context.applicationContext, newPlayer).build()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         // Reload the current item if we have one and restore position
         _currentMediaItem.value?.let { item ->
             val mediaItem = if (item.isLocal && item.localUri != null) {
-                MediaItem.fromUri(item.localUri)
+                createMediaItem(item, item.localUri.toString())
             } else {
-                MediaItem.fromUri(item.url)
+                createMediaItem(item, item.url)
             }
             newPlayer.setMediaItem(mediaItem, lastPosition)
             newPlayer.prepare()
@@ -251,6 +283,8 @@ class PlayerViewModel : ViewModel() {
             p.release()
         }
         player = null
+        mediaSession?.release()
+        mediaSession = null
         _activeVideoDecoder.value = null
         _activeAudioDecoder.value = null
 
@@ -295,7 +329,7 @@ class PlayerViewModel : ViewModel() {
                     val resolvedItem = mediaItem.copy(url = extracted.streamUrl)
                     _currentMediaItem.value = resolvedItem
                     player?.let { p ->
-                        p.setMediaItem(MediaItem.fromUri(extracted.streamUrl))
+                        p.setMediaItem(createMediaItem(resolvedItem, extracted.streamUrl))
                         p.prepare()
                         p.play()
                     }
@@ -313,7 +347,7 @@ class PlayerViewModel : ViewModel() {
                     val resolvedItem = mediaItem.copy(url = playableUrl)
                     _currentMediaItem.value = resolvedItem
                     player?.let { p ->
-                        p.setMediaItem(MediaItem.fromUri(playableUrl))
+                        p.setMediaItem(createMediaItem(resolvedItem, playableUrl))
                         p.prepare()
                         p.play()
                     }
@@ -326,9 +360,9 @@ class PlayerViewModel : ViewModel() {
             _youtubeResolveError.value = null
             player?.let { p ->
                 val m3Item = if (mediaItem.isLocal && mediaItem.localUri != null) {
-                    MediaItem.fromUri(mediaItem.localUri)
+                    createMediaItem(mediaItem, mediaItem.localUri.toString())
                 } else {
-                    MediaItem.fromUri(mediaItem.url)
+                    createMediaItem(mediaItem, mediaItem.url)
                 }
                 p.setMediaItem(m3Item)
                 p.prepare()
@@ -548,6 +582,8 @@ class PlayerViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        mediaSession?.release()
+        mediaSession = null
         player?.release()
         player = null
         stopProgressTracker()

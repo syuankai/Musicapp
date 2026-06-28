@@ -161,6 +161,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
     val backgroundType by viewModel.backgroundType.collectAsState()
+    val selectedWallpaper by viewModel.selectedWallpaper.collectAsState()
 
     var showCodecListSheet by remember { mutableStateOf(false) }
     var videoScaleMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
@@ -190,8 +191,14 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                     .background(Color(0xFF0F111A))
             )
         } else {
+            val bgResource = when (selectedWallpaper) {
+                "cyberpunk" -> R.drawable.wp_cyberpunk_1782527624166
+                "cosmic" -> R.drawable.wp_cosmic_1782527636903
+                "retro" -> R.drawable.wp_retro_1782527649980
+                else -> R.drawable.img_glass_background_1782480821595
+            }
             Image(
-                painter = painterResource(id = R.drawable.img_glass_background_1782480821595),
+                painter = painterResource(id = bgResource),
                 contentDescription = "Background Gradient",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -384,6 +391,76 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                             }
                         }
 
+                        // 3.5 Wallpaper Selector Card
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = "自訂桌布壁紙 (Custom Wallpapers)",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "選擇您喜愛的極致視覺桌布（將套用於炫彩漸層背景模式下）",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    val wallpapers = listOf(
+                                        "default" to "預設流光",
+                                        "cyberpunk" to "賽博朋克霓虹",
+                                        "cosmic" to "浩瀚星際星雲",
+                                        "retro" to "復古霓虹合成波"
+                                    )
+                                    wallpapers.forEach { (wpKey, wpLabel) ->
+                                        val isWpSelected = selectedWallpaper == wpKey
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .border(
+                                                    BorderStroke(1.dp, if (isWpSelected) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.12f)),
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (isWpSelected) Color(0xFFD0BCFF).copy(alpha = 0.15f) else Color.White.copy(alpha = 0.02f))
+                                                .clickable { viewModel.setSelectedWallpaper(wpKey) }
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Movie,
+                                                    contentDescription = wpLabel,
+                                                    tint = if (isWpSelected) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Text(
+                                                    text = wpLabel,
+                                                    color = if (isWpSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isWpSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                            if (isWpSelected) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .background(Color(0xFFD0BCFF), CircleShape)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // 4. Tech codec database card
                         item {
                             GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -546,6 +623,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                             modifier = Modifier
                                                 .fillMaxSize()
                                                 .clip(RoundedCornerShape(16.dp))
+                                                .clickable { isFullScreen = true }
                                         )
                                         
                                         // Video Resize Toggle Overlay
@@ -933,23 +1011,26 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                         ) {
                                             Text(
                                                 text = "${speed}x",
-                                                color = if (isCurrentSpeed) Color.White else Color.White.copy(alpha = 0.5f),
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isCurrentSpeed) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                                                 color = if (isCurrentSpeed) Color.White else Color.White.copy(alpha = 0.5f),
+                                                 fontSize = 11.sp,
+                                                 fontWeight = if (isCurrentSpeed) FontWeight.Bold else FontWeight.Normal
+                                             )
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
 
-                    // YouTube Import and Playback Panel with keyword search and modern Android 17 UI
+                     // Unified Cloud Streaming Panel (YouTube & SoundCloud)
                     item {
+                        var streamingPlatform by remember { mutableStateOf("youtube") } // "youtube" or "soundcloud"
+                        
                         var youtubeUrlOrId by remember { mutableStateOf("") }
                         var isVideoMode by remember { mutableStateOf(false) } // false = audio only, true = video
                         var searchMode by remember { mutableStateOf(0) } // 0 = 關鍵字搜尋, 1 = 貼上連結
                         var searchQuery by remember { mutableStateOf("") }
+                        var soundcloudUrl by remember { mutableStateOf("") }
 
                         val isResolvingYoutube by viewModel.isResolvingYoutube.collectAsState()
                         val youtubeResolveError by viewModel.youtubeResolveError.collectAsState()
@@ -959,280 +1040,519 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                         val youtubeSearchError by viewModel.youtubeSearchError.collectAsState()
 
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            // Header Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "YouTube Icon",
-                                        tint = Color(0xFFFF0000), // YouTube Red
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "YouTube 影音探索",
-                                        color = Color.White,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = "搜尋喜愛的 YouTube 影片或貼上連結，免下載即刻串流播放與自動產生動態背景色彩！",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                            )
-
-                            // Glass Segmented Tab Bar (Android 17 style)
+                            // Sliding custom segmented toggle between YouTube and SoundCloud
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 12.dp)
+                                    .padding(bottom = 14.dp)
                                     .border(
-                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
                                         RoundedCornerShape(12.dp)
                                     )
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White.copy(alpha = 0.03f))
+                                    .background(Color.White.copy(alpha = 0.04f))
                             ) {
-                                listOf("關鍵字搜尋", "貼上網址/ID").forEachIndexed { index, label ->
-                                    val isSelected = searchMode == index
+                                listOf("YouTube", "SoundCloud").forEach { platform ->
+                                    val isSelected = (platform == "YouTube" && streamingPlatform == "youtube") ||
+                                                     (platform == "SoundCloud" && streamingPlatform == "soundcloud")
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
                                             .background(
-                                                if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+                                                if (isSelected) {
+                                                    if (platform == "YouTube") Color(0xFFFF0000).copy(alpha = 0.22f)
+                                                    else Color(0xFFFF5500).copy(alpha = 0.22f)
+                                                } else Color.Transparent
                                             )
-                                            .clickable { searchMode = index }
-                                            .padding(vertical = 10.dp),
+                                            .clickable { 
+                                                streamingPlatform = if (platform == "YouTube") "youtube" else "soundcloud"
+                                            }
+                                            .padding(vertical = 12.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = label,
-                                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = if (platform == "YouTube") Icons.Default.PlayArrow else Icons.Default.Audiotrack,
+                                                contentDescription = platform,
+                                                tint = if (isSelected) {
+                                                    if (platform == "YouTube") Color(0xFFFF4D4D) else Color(0xFFFF7733)
+                                                } else Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = platform,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
 
-                            if (searchMode == 0) {
-                                // Keyword Search Mode
+                            if (streamingPlatform == "youtube") {
+                                // YouTube Mode content
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    androidx.compose.material3.OutlinedTextField(
-                                        value = searchQuery,
-                                        onValueChange = { searchQuery = it },
-                                        label = { Text("輸入關鍵字搜尋影片", color = Color.White.copy(alpha = 0.6f)) },
-                                        placeholder = { Text("例如：周杰倫, lo-fi beats...", color = Color.White.copy(alpha = 0.3f)) },
-                                        singleLine = true,
-                                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .testTag("youtube_search_input"),
-                                        trailingIcon = {
-                                            if (searchQuery.isNotEmpty()) {
-                                                IconButton(onClick = { searchQuery = "" }) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = "Clear",
-                                                        tint = Color.White.copy(alpha = 0.6f),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "YouTube Icon",
+                                            tint = Color(0xFFFF0000),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "YouTube 影音探索",
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "搜尋喜愛的 YouTube 影片或貼上連結，免下載即刻串流播放與自動產生動態背景色彩！",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                                )
+
+                                // Glass Segmented Tab Bar for YouTube modes
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                        .border(
+                                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = 0.03f))
+                                ) {
+                                    listOf("關鍵字搜尋", "貼上網址/ID").forEachIndexed { index, label ->
+                                        val isSelected = searchMode == index
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+                                                )
+                                                .clickable { searchMode = index }
+                                                .padding(vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (searchMode == 0) {
+                                    // Keyword Search Mode
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        androidx.compose.material3.OutlinedTextField(
+                                            value = searchQuery,
+                                            onValueChange = { searchQuery = it },
+                                            label = { Text("輸入關鍵字搜尋影片", color = Color.White.copy(alpha = 0.6f)) },
+                                            placeholder = { Text("例如：周杰倫, lo-fi beats...", color = Color.White.copy(alpha = 0.3f)) },
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("youtube_search_input"),
+                                            trailingIcon = {
+                                                if (searchQuery.isNotEmpty()) {
+                                                    IconButton(onClick = { searchQuery = "" }) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = "Clear",
+                                                            tint = Color.White.copy(alpha = 0.6f),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                if (searchQuery.isNotBlank()) {
+                                                    viewModel.searchYoutube(searchQuery)
+                                                }
+                                            },
+                                            enabled = searchQuery.isNotBlank() && !isSearchingYoutube,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFFD0BCFF),
+                                                disabledContainerColor = Color.White.copy(alpha = 0.1f)
+                                            ),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            if (isSearchingYoutube) {
+                                                androidx.compose.material3.CircularProgressIndicator(
+                                                    color = Color.Black,
+                                                    modifier = Modifier.size(16.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.Search,
+                                                    contentDescription = "Search",
+                                                    tint = Color.Black,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    youtubeSearchError?.let { err ->
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = err,
+                                            color = Color(0xFFFFB3B3),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                        )
+                                    }
+
+                                    if (youtubeSearchResults.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "搜尋結果 (點擊直接加入播放或聽歌)：",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(bottom = 6.dp)
+                                        )
+
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 280.dp)
+                                                .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                                .padding(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                itemsIndexed(youtubeSearchResults) { _, result ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+                                                            .padding(8.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = result.thumbnailUrl,
+                                                            contentDescription = "Thumbnail",
+                                                            modifier = Modifier
+                                                                .size(width = 80.dp, height = 45.dp)
+                                                                .clip(RoundedCornerShape(4.dp)),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = result.title,
+                                                                color = Color.White,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Text(
+                                                                    text = result.uploaderName,
+                                                                    color = Color.White.copy(alpha = 0.5f),
+                                                                    fontSize = 10.sp,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis,
+                                                                    modifier = Modifier.weight(1f)
+                                                                )
+                                                                Text(
+                                                                    text = result.durationText,
+                                                                    color = Color(0xFFEFB8C8),
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .background(Color(0xFFEFB8C8).copy(alpha = 0.15f), CircleShape)
+                                                                    .clickable {
+                                                                        viewModel.addYoutubeItem(
+                                                                            urlOrId = result.videoId,
+                                                                            isVideoMode = false,
+                                                                            onSuccess = {},
+                                                                            onError = {}
+                                                                        )
+                                                                    }
+                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Text("音訊", color = Color(0xFFEFB8C8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                            }
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .background(Color(0xFFD0BCFF).copy(alpha = 0.15f), CircleShape)
+                                                                    .clickable {
+                                                                        viewModel.addYoutubeItem(
+                                                                            urlOrId = result.videoId,
+                                                                            isVideoMode = true,
+                                                                            onSuccess = {},
+                                                                            onError = {}
+                                                                        )
+                                                                    }
+                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Text("影片", color = Color(0xFFD0BCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-                                    )
+                                    }
+                                } else {
+                                    // Paste URL Mode
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        androidx.compose.material3.OutlinedTextField(
+                                            value = youtubeUrlOrId,
+                                            onValueChange = { youtubeUrlOrId = it },
+                                            label = { Text("貼上網址或 11 位影片 ID", color = Color.White.copy(alpha = 0.6f)) },
+                                            placeholder = { Text("https://www.youtube.com/watch?v=...", color = Color.White.copy(alpha = 0.3f)) },
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
+                                            enabled = !isResolvingYoutube,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("youtube_url_input"),
+                                            trailingIcon = {
+                                                if (youtubeUrlOrId.isNotEmpty()) {
+                                                    IconButton(onClick = { youtubeUrlOrId = "" }) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = "Clear",
+                                                            tint = Color.White.copy(alpha = 0.6f),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .border(
+                                                    BorderStroke(
+                                                        1.dp,
+                                                        if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.15f)
+                                                    ),
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .background(
+                                                    if (!isVideoMode) Color(0xFFEFB8C8).copy(alpha = 0.1f) else Color.Transparent
+                                                )
+                                                .clickable { isVideoMode = false }
+                                                .padding(vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Audiotrack,
+                                                contentDescription = "Audio only",
+                                                tint = if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "純音樂模式",
+                                                color = if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .border(
+                                                    BorderStroke(
+                                                        1.dp,
+                                                        if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.15f)
+                                                    ),
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .background(
+                                                    if (isVideoMode) Color(0xFFD0BCFF).copy(alpha = 0.1f) else Color.Transparent
+                                                )
+                                                .clickable { isVideoMode = true }
+                                                .padding(vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Movie,
+                                                contentDescription = "Video mode",
+                                                tint = if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "影片模式",
+                                                color = if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     Button(
                                         onClick = {
-                                            if (searchQuery.isNotBlank()) {
-                                                viewModel.searchYoutube(searchQuery)
+                                            if (youtubeUrlOrId.isNotBlank()) {
+                                                viewModel.addYoutubeItem(
+                                                    urlOrId = youtubeUrlOrId,
+                                                    isVideoMode = isVideoMode,
+                                                    onSuccess = {
+                                                        youtubeUrlOrId = ""
+                                                    },
+                                                    onError = {}
+                                                )
                                             }
                                         },
-                                        enabled = searchQuery.isNotBlank() && !isSearchingYoutube,
+                                        enabled = youtubeUrlOrId.isNotBlank() && !isResolvingYoutube,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFFD0BCFF),
+                                            containerColor = if (isVideoMode) Color(0xFFD0BCFF) else Color(0xFFEFB8C8),
                                             disabledContainerColor = Color.White.copy(alpha = 0.1f)
                                         ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("youtube_add_button"),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        if (isSearchingYoutube) {
+                                        if (isResolvingYoutube) {
                                             androidx.compose.material3.CircularProgressIndicator(
                                                 color = Color.Black,
                                                 modifier = Modifier.size(16.dp),
                                                 strokeWidth = 2.dp
                                             )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("串流解析中...", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         } else {
                                             Icon(
-                                                imageVector = Icons.Default.Search,
-                                                contentDescription = "Search",
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Load Stream",
                                                 tint = Color.Black,
                                                 modifier = Modifier.size(16.dp)
                                             )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("載入 YouTube 串流播放", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                }
 
-                                youtubeSearchError?.let { err ->
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = err,
-                                        color = Color(0xFFFFB3B3),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                                    )
-                                }
-
-                                if (youtubeSearchResults.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(
-                                        text = "搜尋結果 (點擊直接加入播放或聽歌)：",
-                                        color = Color.White.copy(alpha = 0.7f),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(bottom = 6.dp)
-                                    )
-
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 280.dp)
-                                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                                            .padding(6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        LazyColumn(
-                                            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            itemsIndexed(youtubeSearchResults) { _, result ->
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
-                                                        .padding(8.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    // Thumbnail Image via Coil
-                                                    AsyncImage(
-                                                        model = result.thumbnailUrl,
-                                                        contentDescription = "Thumbnail",
-                                                        modifier = Modifier
-                                                            .size(width = 80.dp, height = 45.dp)
-                                                            .clip(RoundedCornerShape(4.dp)),
-                                                        contentScale = ContentScale.Crop
-                                                    )
-
-                                                    // Video text details
-                                                    Column(modifier = Modifier.weight(1f)) {
-                                                        Text(
-                                                            text = result.title,
-                                                            color = Color.White,
-                                                            fontSize = 12.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            Text(
-                                                                text = result.uploaderName,
-                                                                color = Color.White.copy(alpha = 0.5f),
-                                                                fontSize = 10.sp,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis,
-                                                                modifier = Modifier.weight(1f)
-                                                            )
-                                                            Text(
-                                                                text = result.durationText,
-                                                                color = Color(0xFFEFB8C8),
-                                                                fontSize = 10.sp,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        }
-                                                    }
-
-                                                    // Fast play action buttons
-                                                    Row(
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        // Pure music button
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .background(Color(0xFFEFB8C8).copy(alpha = 0.15f), CircleShape)
-                                                                .clickable {
-                                                                    viewModel.addYoutubeItem(
-                                                                        urlOrId = result.videoId,
-                                                                        isVideoMode = false,
-                                                                        onSuccess = {},
-                                                                        onError = {}
-                                                                    )
-                                                                }
-                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        ) {
-                                                            Text("音訊", color = Color(0xFFEFB8C8), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                        }
-
-                                                        // Video button
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .background(Color(0xFFD0BCFF).copy(alpha = 0.15f), CircleShape)
-                                                                .clickable {
-                                                                    viewModel.addYoutubeItem(
-                                                                        urlOrId = result.videoId,
-                                                                        isVideoMode = true,
-                                                                        onSuccess = {},
-                                                                        onError = {}
-                                                                    )
-                                                                }
-                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        ) {
-                                                            Text("影片", color = Color(0xFFD0BCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
+                                    youtubeResolveError?.let { err ->
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = err,
+                                            color = Color(0xFFFFB3B3),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                        )
                                     }
                                 }
                             } else {
-                                // Paste URL / ID Mode
+                                // SoundCloud Mode content
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Audiotrack,
+                                            contentDescription = "SoundCloud Icon",
+                                            tint = Color(0xFFFF5500),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "SoundCloud 音樂匯入",
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "貼上 SoundCloud 的單首歌曲或播放清單(Sets)網址，即可一鍵載入待播清單串流播放！",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                                )
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     androidx.compose.material3.OutlinedTextField(
-                                        value = youtubeUrlOrId,
-                                        onValueChange = { youtubeUrlOrId = it },
-                                        label = { Text("貼上網址或 11 位影片 ID", color = Color.White.copy(alpha = 0.6f)) },
-                                        placeholder = { Text("https://www.youtube.com/watch?v=...", color = Color.White.copy(alpha = 0.3f)) },
+                                        value = soundcloudUrl,
+                                        onValueChange = { soundcloudUrl = it },
+                                        label = { Text("貼上 SoundCloud 網址", color = Color.White.copy(alpha = 0.6f)) },
+                                        placeholder = { Text("https://soundcloud.com/...", color = Color.White.copy(alpha = 0.3f)) },
                                         singleLine = true,
                                         textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
                                         enabled = !isResolvingYoutube,
                                         modifier = Modifier
                                             .weight(1f)
-                                            .testTag("youtube_url_input"),
+                                            .testTag("soundcloud_url_input"),
                                         trailingIcon = {
-                                            if (youtubeUrlOrId.isNotEmpty()) {
-                                                IconButton(onClick = { youtubeUrlOrId = "" }) {
+                                            if (soundcloudUrl.isNotEmpty()) {
+                                                IconButton(onClick = { soundcloudUrl = "" }) {
                                                     Icon(
                                                         imageVector = Icons.Default.Close,
                                                         contentDescription = "Clear",
@@ -1247,124 +1567,45 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                // Segmented Controls to choose Mode (Audio vs Video)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .border(
-                                                BorderStroke(
-                                                    1.dp,
-                                                    if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.15f)
-                                                ),
-                                                RoundedCornerShape(8.dp)
-                                            )
-                                            .background(
-                                                if (!isVideoMode) Color(0xFFEFB8C8).copy(alpha = 0.1f) else Color.Transparent
-                                            )
-                                            .clickable { isVideoMode = false }
-                                            .padding(vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Audiotrack,
-                                            contentDescription = "Audio only",
-                                            tint = if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "純音樂模式",
-                                            color = if (!isVideoMode) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    Row(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .border(
-                                                BorderStroke(
-                                                    1.dp,
-                                                    if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.15f)
-                                                ),
-                                                RoundedCornerShape(8.dp)
-                                            )
-                                            .background(
-                                                if (isVideoMode) Color(0xFFD0BCFF).copy(alpha = 0.1f) else Color.Transparent
-                                            )
-                                            .clickable { isVideoMode = true }
-                                            .padding(vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Movie,
-                                            contentDescription = "Video mode",
-                                            tint = if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "影片模式",
-                                            color = if (isVideoMode) Color(0xFFD0BCFF) else Color.White.copy(alpha = 0.6f),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // Action button
                                 Button(
                                     onClick = {
-                                        if (youtubeUrlOrId.isNotBlank()) {
-                                            viewModel.addYoutubeItem(
-                                                urlOrId = youtubeUrlOrId,
-                                                isVideoMode = isVideoMode,
+                                        if (soundcloudUrl.isNotBlank()) {
+                                            viewModel.addSoundCloudItem(
+                                                url = soundcloudUrl,
                                                 onSuccess = {
-                                                    youtubeUrlOrId = "" // clear input on success
+                                                    soundcloudUrl = ""
                                                 },
-                                                onError = {
-                                                    // Handle error
-                                                }
+                                                onError = {}
                                             )
                                         }
                                     },
-                                    enabled = youtubeUrlOrId.isNotBlank() && !isResolvingYoutube,
+                                    enabled = soundcloudUrl.isNotBlank() && !isResolvingYoutube,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isVideoMode) Color(0xFFD0BCFF) else Color(0xFFEFB8C8),
+                                        containerColor = Color(0xFFFF5500),
                                         disabledContainerColor = Color.White.copy(alpha = 0.1f)
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .testTag("youtube_add_button"),
+                                        .testTag("soundcloud_add_button"),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    if (isResolvingYoutube) {
+                                    if (isResolvingYoutube && soundcloudUrl.isNotEmpty()) {
                                         androidx.compose.material3.CircularProgressIndicator(
-                                            color = Color.Black,
+                                            color = Color.White,
                                             modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("串流解析中...", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("串流解析中...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     } else {
                                         Icon(
                                             imageVector = Icons.Default.Add,
                                             contentDescription = "Load Stream",
-                                            tint = Color.Black,
+                                            tint = Color.White,
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("載入 YouTube 串流播放", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("載入 SoundCloud 串流", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
@@ -1377,119 +1618,6 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.align(Alignment.CenterHorizontally)
                                     )
-                                }
-                            }
-                        }
-                    }
-
-                    // SoundCloud Import Card
-                    item {
-                        var soundcloudUrl by remember { mutableStateOf("") }
-                        val isResolvingSoundcloud by viewModel.isResolvingYoutube.collectAsState()
-                        val soundcloudResolveError by viewModel.youtubeResolveError.collectAsState()
-                        
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Audiotrack,
-                                        contentDescription = "SoundCloud Icon",
-                                        tint = Color(0xFFFF5500),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "SoundCloud 音樂匯入",
-                                        color = Color.White,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = "貼上 SoundCloud 的單首歌曲或播放清單(Sets)網址，即可一鍵載入待播清單串流播放！",
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                androidx.compose.material3.OutlinedTextField(
-                                    value = soundcloudUrl,
-                                    onValueChange = { soundcloudUrl = it },
-                                    label = { Text("貼上 SoundCloud 網址", color = Color.White.copy(alpha = 0.6f)) },
-                                    placeholder = { Text("https://soundcloud.com/...", color = Color.White.copy(alpha = 0.3f)) },
-                                    singleLine = true,
-                                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
-                                    enabled = !isResolvingSoundcloud,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("soundcloud_url_input"),
-                                    trailingIcon = {
-                                        if (soundcloudUrl.isNotEmpty()) {
-                                            IconButton(onClick = { soundcloudUrl = "" }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Close,
-                                                    contentDescription = "Clear",
-                                                    tint = Color.White.copy(alpha = 0.6f),
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Button(
-                                onClick = {
-                                    if (soundcloudUrl.isNotBlank()) {
-                                        viewModel.addSoundCloudItem(
-                                            url = soundcloudUrl,
-                                            onSuccess = {
-                                                soundcloudUrl = ""
-                                            },
-                                            onError = {}
-                                        )
-                                    }
-                                },
-                                enabled = soundcloudUrl.isNotBlank() && !isResolvingSoundcloud,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFFF5500),
-                                    disabledContainerColor = Color.White.copy(alpha = 0.1f)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("soundcloud_add_button"),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                if (isResolvingSoundcloud && soundcloudUrl.isNotEmpty()) {
-                                    androidx.compose.material3.CircularProgressIndicator(
-                                        color = Color.White,
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("串流解析中...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Load Stream",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("載入 SoundCloud 串流", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
