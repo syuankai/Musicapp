@@ -252,10 +252,18 @@ class PlayerViewModel : ViewModel() {
             .setTitle(model.title)
             .setArtist(model.artist)
             .build()
-        return MediaItem.Builder()
+        
+        val isHls = model.id.startsWith("soundcloud_") && (_playlist.value.find { it.id == model.id }?.url?.contains("/hls") == true)
+        
+        val builder = MediaItem.Builder()
             .setUri(url)
             .setMediaMetadata(metadata)
-            .build()
+            
+        if (isHls) {
+            builder.setMimeType(androidx.media3.common.MimeTypes.APPLICATION_M3U8)
+        }
+        
+        return builder.build()
     }
 
     private var progressJob: Job? = null

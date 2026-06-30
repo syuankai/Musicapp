@@ -66,9 +66,15 @@ jobs:
         path: app/build/outputs/apk/debug/app-debug.apk
 
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+        name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Continuous Build v1.0.{0}', github.run_number) }}
+        body: |
+          此 Release 為自動建置與發布。
+          - 提交資訊: ${{ github.event.head_commit.message }}
+          - 提交 SHA: ${{ github.sha }}
+          - 來源分支: ${{ github.ref_name }}
         files: app/build/outputs/apk/debug/app-debug.apk
         draft: false
         prerelease: false
