@@ -167,6 +167,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     var videoScaleMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var showSettingsPage by remember { mutableStateOf(false) }
     var isFullScreen by remember { mutableStateOf(false) }
+    var selectedPlaylistTab by remember { mutableStateOf("all") }
 
     // Media picking launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -335,6 +336,62 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                                 modifier = Modifier.testTag("decoder_pref_$type")
                                             )
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 2.5 Active Decoders Info Card
+                        item {
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeveloperMode,
+                                        contentDescription = "Decoder Tech",
+                                        tint = Color(0xFFD0BCFF),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "使用中解碼晶片 (Active MediaCodec)",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "此為系統核心在播放目前影音串流時，實際調用並激活的解碼硬體或軟體模組",
+                                    color = Color.White.copy(alpha = 0.5f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(bottom = 12.dp, top = 2.dp)
+                                )
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    val audioDec = activeAudioDecoder?.let { DecoderHelper.getFriendlyName(it) } ?: if (playbackState == Player.STATE_IDLE) "無" else "載入中..."
+                                    val videoDec = activeVideoDecoder?.let { DecoderHelper.getFriendlyName(it) } ?: if (currentMediaItem?.isVideo == true) "載入中..." else "無 (純音訊檔)"
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("音訊解碼:", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                                        Text(audioDec, color = Color(0xFFEFB8C8), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("active_audio_decoder"))
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("視訊解碼:", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                                        Text(videoDec, color = Color(0xFFD0BCFF), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("active_video_decoder"))
                                     }
                                 }
                             }
@@ -770,82 +827,31 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                         }
                     }
 
-                    // Metadata & Decoder Info Panel
+                    // Metadata Panel
                     item {
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = currentMediaItem?.title ?: "未在播放",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = currentMediaItem?.artist ?: "未知演出者",
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 14.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Divider(color = Color.White.copy(alpha = 0.1f))
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Technical Decoders Debug Badge
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.DeveloperMode,
-                                            contentDescription = "Decoder Tech",
-                                            tint = Color(0xFFD0BCFF),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "使用中解碼器 (MediaCodec):",
-                                            color = Color.White.copy(alpha = 0.7f),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                }
-
-                                // Interactive Active Audio & Video Codec labels
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                                        .padding(10.dp)
-                                ) {
-                                    val audioDec = activeAudioDecoder?.let { DecoderHelper.getFriendlyName(it) } ?: if (playbackState == Player.STATE_IDLE) "無" else "載入中..."
-                                    val videoDec = activeVideoDecoder?.let { DecoderHelper.getFriendlyName(it) } ?: if (currentMediaItem?.isVideo == true) "載入中..." else "無 (純音訊檔)"
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("音訊解碼:", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
-                                        Text(audioDec, color = Color(0xFFEFB8C8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("active_audio_decoder"))
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text("視訊解碼:", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
-                                        Text(videoDec, color = Color(0xFFD0BCFF), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("active_video_decoder"))
-                                    }
-                                }
+                                Text(
+                                    text = currentMediaItem?.title ?: "未在播放",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("current_track_title")
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = currentMediaItem?.artist ?: "未知演出者",
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.testTag("current_track_artist")
+                                )
                             }
                         }
                     }
@@ -1657,73 +1663,151 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
 
                             Spacer(modifier = Modifier.height(10.dp))
 
+                            // Dynamic tab layout based on presence of cloud items
+                            val hasCloudItems = playlist.any { !it.isLocal }
+                            if (hasCloudItems) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp)
+                                        .border(
+                                            BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color.White.copy(alpha = 0.03f))
+                                ) {
+                                    val tabs = listOf(
+                                        "all" to "全部待播",
+                                        "local" to "本機音樂",
+                                        "cloud" to "雲端串流"
+                                    )
+                                    tabs.forEach { (tabKey, tabLabel) ->
+                                        val isTabSelected = selectedPlaylistTab == tabKey
+                                        val count = when (tabKey) {
+                                            "all" -> playlist.size
+                                            "local" -> playlist.count { it.isLocal }
+                                            else -> playlist.count { !it.isLocal }
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .background(
+                                                    if (isTabSelected) Color.White.copy(alpha = 0.12f) else Color.Transparent
+                                                )
+                                                .clickable { selectedPlaylistTab = tabKey }
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "$tabLabel ($count)",
+                                                color = if (isTabSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isTabSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                if (selectedPlaylistTab == "cloud") {
+                                    selectedPlaylistTab = "all"
+                                }
+                            }
+
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                playlist.forEachIndexed { idx, item ->
-                                    val isSelected = currentIndex == idx
-                                    Row(
+                                val filteredPlaylist = playlist.mapIndexed { idx, item -> idx to item }.filter { (_, item) ->
+                                    if (hasCloudItems) {
+                                        when (selectedPlaylistTab) {
+                                            "local" -> item.isLocal
+                                            "cloud" -> !item.isLocal
+                                            else -> true
+                                        }
+                                    } else {
+                                        true
+                                    }
+                                }
+
+                                if (filteredPlaylist.isEmpty()) {
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .border(
-                                                BorderStroke(
-                                                    1.dp,
-                                                    if (isSelected) Color(0xFFEFB8C8).copy(alpha = 0.4f) else Color.Transparent
-                                                ),
-                                                RoundedCornerShape(12.dp)
-                                            )
-                                            .background(
-                                                if (isSelected) Color.White.copy(alpha = 0.08f) else Color.Transparent,
-                                                RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable { viewModel.playItem(item, idx) }
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .padding(vertical = 24.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        // Dynamic Type Icon
-                                        Icon(
-                                            imageVector = if (item.isVideo) Icons.Default.Movie else Icons.Default.Audiotrack,
-                                            contentDescription = if (item.isVideo) "Video File" else "Audio File",
-                                            tint = if (isSelected) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
-                                            modifier = Modifier.size(18.dp)
+                                        Text(
+                                            text = "此分頁暫無歌曲",
+                                            color = Color.White.copy(alpha = 0.4f),
+                                            fontSize = 12.sp
                                         )
-
-                                        Spacer(modifier = Modifier.width(12.dp))
-
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = item.title,
-                                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
-                                                fontSize = 13.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            val subtitleText = when {
-                                                item.id.startsWith("youtube_") -> "YouTube 串流 • ${item.artist}"
-                                                item.id.startsWith("soundcloud_") -> "SoundCloud 串流 • ${item.artist}"
-                                                item.isLocal -> "本機匯入 • ${item.artist}"
-                                                else -> "串流媒體 • ${item.artist}"
-                                            }
-                                            Text(
-                                                text = subtitleText,
-                                                color = Color.White.copy(alpha = 0.4f),
-                                                fontSize = 11.sp
-                                            )
-                                        }
-
-                                        // Delete from playlist button
-                                        IconButton(
-                                            onClick = { viewModel.removePlaylistItem(idx) },
-                                            modifier = Modifier.size(24.dp)
+                                    }
+                                } else {
+                                    filteredPlaylist.forEach { (idx, item) ->
+                                        val isSelected = currentIndex == idx
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .border(
+                                                    BorderStroke(
+                                                        1.dp,
+                                                        if (isSelected) Color(0xFFEFB8C8).copy(alpha = 0.4f) else Color.Transparent
+                                                    ),
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .background(
+                                                    if (isSelected) Color.White.copy(alpha = 0.08f) else Color.Transparent,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                                .clickable { viewModel.playItem(item, idx) }
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            // Dynamic Type Icon
                                             Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Delete Track",
-                                                tint = Color.White.copy(alpha = 0.4f),
-                                                modifier = Modifier.size(16.dp)
+                                                imageVector = if (item.isVideo) Icons.Default.Movie else Icons.Default.Audiotrack,
+                                                contentDescription = if (item.isVideo) "Video File" else "Audio File",
+                                                tint = if (isSelected) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(18.dp)
                                             )
+
+                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val subtitleText = when {
+                                                    item.id.startsWith("youtube_") -> "YouTube • ${item.artist}"
+                                                    item.id.startsWith("soundcloud_") -> "SoundCloud • ${item.artist}"
+                                                    item.isLocal -> "本機 • ${item.artist}"
+                                                    else -> "串流 • ${item.artist}"
+                                                }
+                                                Text(
+                                                    text = subtitleText,
+                                                    color = Color.White.copy(alpha = 0.4f),
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+
+                                            // Delete from playlist button
+                                            IconButton(
+                                                onClick = { viewModel.removePlaylistItem(idx) },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Delete Track",
+                                                    tint = Color.White.copy(alpha = 0.4f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
