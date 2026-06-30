@@ -253,7 +253,9 @@ class PlayerViewModel : ViewModel() {
             .setArtist(model.artist)
             .build()
         
-        val isHls = model.id.startsWith("soundcloud_") && (_playlist.value.find { it.id == model.id }?.url?.contains("/hls") == true)
+        val isHls = url.contains(".m3u8") || 
+                     url.contains("/hls") || 
+                     (model.id.startsWith("soundcloud_") && (_playlist.value.find { it.id == model.id }?.url?.contains("/hls") == true))
         
         val builder = MediaItem.Builder()
             .setUri(url)
@@ -339,8 +341,33 @@ class PlayerViewModel : ViewModel() {
                 _isPlaying.value = isPlaying
                 if (isPlaying) {
                     startProgressTracker()
+                    activeSession = mediaSession
+                    appContext?.let { ctx ->
+                        try {
+                            val serviceIntent = android.content.Intent(ctx, MediaPlaybackService::class.java).apply {
+                                action = "START"
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                ctx.startForegroundService(serviceIntent)
+                            } else {
+                                ctx.startService(serviceIntent)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                 } else {
                     stopProgressTracker()
+                    appContext?.let { ctx ->
+                        try {
+                            val serviceIntent = android.content.Intent(ctx, MediaPlaybackService::class.java).apply {
+                                action = "START"
+                            }
+                            ctx.startService(serviceIntent)
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                 }
             }
 
@@ -435,7 +462,9 @@ class PlayerViewModel : ViewModel() {
 
         try {
             mediaSession?.release()
-            mediaSession = androidx.media3.session.MediaSession.Builder(context.applicationContext, newPlayer).build()
+            val session = androidx.media3.session.MediaSession.Builder(context.applicationContext, newPlayer).build()
+            mediaSession = session
+            activeSession = session
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -806,6 +835,17 @@ class PlayerViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        appContext?.let { ctx ->
+            try {
+                val serviceIntent = android.content.Intent(ctx, MediaPlaybackService::class.java).apply {
+                    action = "STOP"
+                }
+                ctx.startService(serviceIntent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        activeSession = null
         mediaSession?.release()
         mediaSession = null
         player?.release()

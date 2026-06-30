@@ -2088,70 +2088,133 @@ fun HeaderRow(
 
 @Composable
 fun AnimatedEqualizer(isPlaying: Boolean) {
-    // Canvas animation for reactive equalizer bouncing bars
-    val transition = rememberInfiniteTransition(label = "equalizer")
+    // 頻段數量，設定為 16 個頻段，使佈局極其精緻
+    val barCount = 16
     
-    // Animate heights for 6 distinct visualizer bars
-    val bar1 by transition.animateFloat(
-        initialValue = 10f, targetValue = 45f,
-        animationSpec = infiniteRepeatable(tween(450, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b1"
-    )
-    val bar2 by transition.animateFloat(
-        initialValue = 5f, targetValue = 55f,
-        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b2"
-    )
-    val bar3 by transition.animateFloat(
-        initialValue = 20f, targetValue = 35f,
-        animationSpec = infiniteRepeatable(tween(550, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b3"
-    )
-    val bar4 by transition.animateFloat(
-        initialValue = 8f, targetValue = 60f,
-        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b4"
-    )
-    val bar5 by transition.animateFloat(
-        initialValue = 15f, targetValue = 40f,
-        animationSpec = infiniteRepeatable(tween(480, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b5"
-    )
-    val bar6 by transition.animateFloat(
-        initialValue = 6f, targetValue = 50f,
-        animationSpec = infiniteRepeatable(tween(380, easing = LinearEasing), RepeatMode.Reverse),
-        label = "b6"
-    )
+    // 記錄每個頻段當前的高度（百分比 0.0f 到 1.0f）
+    val heights = remember { FloatArray(barCount) { 0.1f } }
+    // 記錄每個頻段的峰值位置（0.0f 到 1.0f）
+    val peaks = remember { FloatArray(barCount) { 0.1f } }
+    // 記錄每個峰值的下墜速度
+    val peakWeights = remember { FloatArray(barCount) { 0f } }
 
-    Row(
-        modifier = Modifier
-            .width(160.dp)
-            .height(65.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.Bottom
-    ) {
-        val heights = if (isPlaying) {
-            listOf(bar1, bar2, bar3, bar4, bar5, bar6)
-        } else {
-            listOf(10f, 10f, 10f, 10f, 10f, 10f)
+    // 使用 withFrameNanos 產生平滑且幀率同步的物理動力學動畫
+    var tick by remember { mutableStateOf(0f) }
+    
+    LaunchedEffect(isPlaying) {
+        val frequencies = FloatArray(barCount) { i ->
+            0.6f + (i * 0.08f)
         }
-        
-        val colors = listOf(
-            Color(0xFFEFB8C8),
-            Color(0xFFD0BCFF),
-            Color(0xFFCCC2DC),
-            Color(0xFFEFB8C8),
-            Color(0xFFD0BCFF),
-            Color(0xFFCCC2DC)
-        )
+        val phases = FloatArray(barCount) { i ->
+            (i * 0.4f)
+        }
 
-        heights.forEachIndexed { i, h ->
-            Box(
-                modifier = Modifier
-                    .width(8.dp)
-                    .height(h.dp)
-                    .background(colors[i], RoundedCornerShape(4.dp))
+        var lastTimeNanos = System.nanoTime()
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { frameTimeNanos ->
+                val dt = (frameTimeNanos - lastTimeNanos) / 1_000_000_000f // 秒
+                lastTimeNanos = frameTimeNanos
+                
+                if (isPlaying) {
+                    tick += dt * 4.5f // 控制跳動的基礎速度
+                    for (i in 0 until barCount) {
+                        // 使用多重正弦波、餘弦波和隨機小噪聲混合，模擬出極其逼真的音樂頻率能量分佈
+                        val baseWave = kotlin.math.sin(tick * frequencies[i] + phases[i])
+                        val subWave = kotlin.math.cos(tick * frequencies[i] * 1.8f + phases[i] * 1.2f)
+                        val noise = (kotlin.math.sin(tick * 12f + i) * 0.12f)
+                        
+                        // 低頻（左側）振幅較大，高頻（右側）振幅較精緻
+                        val positionWeight = 1.0f - (i.toFloat() / barCount) * 0.35f
+                        
+                        // 計算目標高度百分比
+                        val targetHeight = ((baseWave * 0.45f + subWave * 0.25f + noise + 0.5f) * positionWeight).coerceIn(0.08f, 0.92f)
+                        
+                        // 稍微平滑插值 (Lerp) 讓跳動更圓滑，避免突變
+                        heights[i] = heights[i] + (targetHeight - heights[i]) * 0.22f
+                    }
+                } else {
+                    // 暫停時，所有頻譜柱平滑地落回極小值
+                    for (i in 0 until barCount) {
+                        heights[i] = heights[i] + (0.05f - heights[i]) * 0.12f
+                    }
+                }
+
+                // 物理重力模擬：更新峰值亮點
+                for (i in 0 until barCount) {
+                    val currentH = heights[i]
+                    if (currentH >= peaks[i]) {
+                        peaks[i] = currentH
+                        peakWeights[i] = 0f // 歸零重力下墜速度
+                    } else {
+                        // 隨著時間，重力加速度讓峰值下掉
+                        peakWeights[i] = peakWeights[i] + 1.0f * dt // 加速度
+                        peaks[i] = (peaks[i] - peakWeights[i] * dt).coerceIn(0.05f, 1.0f)
+                        // 限制如果掉到比當前高度還低，則對齊
+                        if (peaks[i] < currentH) {
+                            peaks[i] = currentH
+                            peakWeights[i] = 0f
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 繪製頻譜
+    Canvas(
+        modifier = Modifier
+            .width(220.dp)
+            .height(80.dp)
+            .padding(horizontal = 8.dp)
+            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
+            .border(
+                BorderStroke(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.02f))
+                    )
+                ),
+                shape = RoundedCornerShape(16.dp)
             )
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        val width = size.width
+        val height = size.height
+        val spacing = 4.dp.toPx()
+        val totalSpacing = spacing * (barCount - 1)
+        val barWidth = (width - totalSpacing) / barCount
+
+        for (i in 0 until barCount) {
+            val barHeight = heights[i] * height
+            val x = i * (barWidth + spacing)
+            val y = height - barHeight
+
+            // 玻璃擬態霓虹漸變色筆刷
+            val brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFFEFB8C8), // 亮霓虹粉
+                    Color(0xFFD0BCFF), // 電光紫
+                    Color(0xFFD0BCFF).copy(alpha = 0.15f) // 半透明底部，打造空氣懸浮感
+                )
+            )
+
+            // 繪製頻譜柱
+            drawRoundRect(
+                brush = brush,
+                topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
+            )
+
+            // 繪製頂部浮動亮點（Peak Float Point）
+            val peakY = height - (peaks[i] * height) - 3.dp.toPx()
+            if (peakY < height - 5.dp.toPx()) {
+                drawCircle(
+                    color = Color(0xFFEFB8C8),
+                    radius = (barWidth / 2f).coerceAtMost(2.5f.dp.toPx()),
+                    center = androidx.compose.ui.geometry.Offset(x + barWidth / 2f, peakY)
+                )
+            }
         }
     }
 }
