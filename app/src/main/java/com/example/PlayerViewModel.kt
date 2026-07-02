@@ -119,6 +119,16 @@ class PlayerViewModel : ViewModel() {
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
+    // 0 = Off, 1 = Repeat One (單曲循環), 2 = Repeat All (歌單循環)
+    private val _repeatMode = MutableStateFlow(0)
+    val repeatMode: StateFlow<Int> = _repeatMode.asStateFlow()
+
+    private val _currentBitrate = MutableStateFlow<Int?>(null)
+    val currentBitrate: StateFlow<Int?> = _currentBitrate.asStateFlow()
+
+    private val _currentSampleRate = MutableStateFlow<Int?>(null)
+    val currentSampleRate: StateFlow<Int?> = _currentSampleRate.asStateFlow()
+
     // YouTube Search States
     private val _youtubeSearchResults = MutableStateFlow<List<YoutubeSearchResult>>(emptyList())
     val youtubeSearchResults: StateFlow<List<YoutubeSearchResult>> = _youtubeSearchResults.asStateFlow()
@@ -192,6 +202,7 @@ class PlayerViewModel : ViewModel() {
         _isMuted.value = prefs.getBoolean("is_muted", false)
         _backgroundType.value = prefs.getString("background_type", "gradient") ?: "gradient"
         _selectedWallpaper.value = prefs.getString("selected_wallpaper", "default") ?: "default"
+        _repeatMode.value = prefs.getInt("repeat_mode", 0)
 
         // Load playlist
         val jsonStr = prefs.getString("playlist", null)
@@ -330,7 +341,11 @@ class PlayerViewModel : ViewModel() {
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build().apply {
-                repeatMode = Player.REPEAT_MODE_OFF
+                repeatMode = when (_repeatMode.value) {
+                    1 -> Player.REPEAT_MODE_ONE
+                    2 -> Player.REPEAT_MODE_ALL
+                    else -> Player.REPEAT_MODE_OFF
+                }
                 volume = if (_isMuted.value) 0.0f else 1.0f
                 setPlaybackSpeed(_playbackSpeed.value)
             }
@@ -376,7 +391,7 @@ class PlayerViewModel : ViewModel() {
                 if (state == Player.STATE_READY) {
                     _duration.value = newPlayer.duration.coerceAtLeast(0L)
                 } else if (state == Player.STATE_ENDED) {
-                    playNext()
+                    playNext(autoEnded = true)
                 }
             }
 
@@ -456,6 +471,25 @@ class PlayerViewModel : ViewModel() {
             ) {
                 _activeAudioDecoder.value = decoderName
             }
+
+            override fun onAudioInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                format: androidx.media3.common.Format
+            ) {
+                if (format.bitrate > 0) {
+                    _currentBitrate.value = format.bitrate / 1000
+                }
+                if (format.sampleRate > 0) {
+                    _currentSampleRate.value = format.sampleRate
+                }
+            }
+
+            override fun onVideoInputFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                format: androidx.media3.common.Format
+            ) {
+                // Video bitrate can be used if desired, but we focus on audio
+            }
         })
 
         player = newPlayer
@@ -499,6 +533,8 @@ class PlayerViewModel : ViewModel() {
         mediaSession = null
         _activeVideoDecoder.value = null
         _activeAudioDecoder.value = null
+        _currentBitrate.value = null
+        _currentSampleRate.value = null
 
         // Recreate with new codec preference
         setupPlayerInstance(context)
@@ -527,6 +563,8 @@ class PlayerViewModel : ViewModel() {
         _currentMediaItem.value = mediaItem
         _activeVideoDecoder.value = null
         _activeAudioDecoder.value = null
+        _currentBitrate.value = null
+        _currentSampleRate.value = null
         lastPosition = 0L
         saveSetting("current_index", index)
 
@@ -701,12 +739,12 @@ class PlayerViewModel : ViewModel() {
             if (p.isPlaying) {
                 p.pause()
             } else {
-                val currentItem = _currentMediaItem.value
-                if (currentItem != null && (currentItem.id.startsWith("youtube_") || currentItem.id.startsWith("soundcloud_"))) {
-                    // Re-resolve and play to handle potentially expired streams on resume
-                    playItem(currentItem, _currentIndex.value)
+                if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
+                    val currentItem = _currentMediaItem.value
+                    if (currentItem != null) {
+                        playItem(currentItem, _currentIndex.value)
+                    }
                 } else {
-                    p.prepare()
                     p.play()
                 }
             }
@@ -734,11 +772,25 @@ class PlayerViewModel : ViewModel() {
         }
     }
 
-    fun playNext() {
+    fun playNext(autoEnded: Boolean = false) {
         val currentList = _playlist.value
         if (currentList.isEmpty()) return
-        val nextIndex = (_currentIndex.value + 1) % currentList.size
-        playItem(currentList[nextIndex], nextIndex)
+        val nextIndex = _currentIndex.value + 1
+        if (nextIndex < currentList.size) {
+            playItem(currentList[nextIndex], nextIndex)
+        } else {
+            // Reached the end of the playlist
+            if (_repeatMode.value == 2) { // Repeat All
+                playItem(currentList[0], 0)
+            } else {
+                if (autoEnded) {
+                    player?.seekTo(0)
+                    player?.pause()
+                } else {
+                    playItem(currentList[0], 0)
+                }
+            }
+        }
     }
 
     fun playPrevious() {
@@ -761,6 +813,17 @@ class PlayerViewModel : ViewModel() {
         _isMuted.value = newMute
         player?.volume = if (newMute) 0.0f else 1.0f
         saveSetting("is_muted", newMute)
+    }
+
+    fun toggleRepeatMode() {
+        val nextMode = (_repeatMode.value + 1) % 3
+        _repeatMode.value = nextMode
+        saveSetting("repeat_mode", nextMode)
+        player?.repeatMode = when (nextMode) {
+            1 -> Player.REPEAT_MODE_ONE
+            2 -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
     }
 
     fun searchYoutube(query: String) {

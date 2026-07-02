@@ -160,6 +160,9 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     val activeAudioDecoder by viewModel.activeAudioDecoder.collectAsState()
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
+    val repeatMode by viewModel.repeatMode.collectAsState()
+    val currentBitrate by viewModel.currentBitrate.collectAsState()
+    val currentSampleRate by viewModel.currentSampleRate.collectAsState()
     val backgroundType by viewModel.backgroundType.collectAsState()
     val selectedWallpaper by viewModel.selectedWallpaper.collectAsState()
 
@@ -168,6 +171,13 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
     var showSettingsPage by remember { mutableStateOf(false) }
     var isFullScreen by remember { mutableStateOf(false) }
     var selectedPlaylistTab by remember { mutableStateOf("all") }
+
+    val hasCloudItemsState = remember(playlist) { playlist.any { !it.isLocal } }
+    LaunchedEffect(hasCloudItemsState) {
+        if (!hasCloudItemsState && selectedPlaylistTab == "cloud") {
+            selectedPlaylistTab = "all"
+        }
+    }
 
     // Media picking launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -234,14 +244,6 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                     .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header Panel
-                HeaderRow(
-                    onImportClick = { filePickerLauncher.launch("*/*") },
-                    onSettingsClick = { showSettingsPage = !showSettingsPage }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
                 // Scrollable main body
                 if (showSettingsPage) {
                     LazyColumn(
@@ -251,6 +253,12 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        item {
+                            HeaderRow(
+                                onImportClick = { filePickerLauncher.launch("*/*") },
+                                onSettingsClick = { showSettingsPage = !showSettingsPage }
+                            )
+                        }
                         // 1. Settings Back Navigation and Info card
                         item {
                             Row(
@@ -586,6 +594,12 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        item {
+                            HeaderRow(
+                                onImportClick = { filePickerLauncher.launch("*/*") },
+                                onSettingsClick = { showSettingsPage = !showSettingsPage }
+                            )
+                        }
                     
                     // Main Media Screen (Audio Visualizer or Video Surface with cinematic ambient mode)
                     item {
@@ -852,6 +866,67 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.testTag("current_track_artist")
                                 )
+
+                                if (currentMediaItem != null) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Format / Decoder Badge
+                                        val codecName = activeAudioDecoder?.let { DecoderHelper.getFriendlyName(it) } ?: "MediaCodec"
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = codecName,
+                                                color = Color(0xFFEFB8C8),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        // Bitrate Badge
+                                        val bitrateToShow = currentBitrate
+                                        if (bitrateToShow != null && bitrateToShow > 0) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${bitrateToShow} kbps",
+                                                    color = Color(0xFFD0BCFF),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        // Sample Rate Badge
+                                        val sampleRateToShow = currentSampleRate
+                                        if (sampleRateToShow != null && sampleRateToShow > 0) {
+                                            val khz = "%.1f".format(sampleRateToShow / 1000f)
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                                                    .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${khz} kHz",
+                                                    color = Color(0xFF80DEEA),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -978,25 +1053,57 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Mute toggle
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clickable { viewModel.toggleMute() }
-                                        .padding(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = if (isMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
-                                        contentDescription = "Mute Toggle",
-                                        tint = Color.White.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isMuted) "靜音" else "音量開啟",
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 11.sp
-                                    )
+                                    // Mute toggle
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clickable { viewModel.toggleMute() }
+                                            .padding(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
+                                            contentDescription = "Mute Toggle",
+                                            tint = Color.White.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isMuted) "靜音" else "音量開啟",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    // Repeat Mode Toggle
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .clickable { viewModel.toggleRepeatMode() }
+                                            .padding(4.dp)
+                                            .testTag("repeat_mode_toggle")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Repeat Mode Toggle",
+                                            tint = if (repeatMode > 0) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = when (repeatMode) {
+                                                1 -> "單曲循環"
+                                                2 -> "全部循環"
+                                                else -> "順序播放"
+                                            },
+                                            color = if (repeatMode > 0) Color(0xFFEFB8C8) else Color.White.copy(alpha = 0.5f),
+                                            fontSize = 11.sp,
+                                            fontWeight = if (repeatMode > 0) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
                                 }
 
                                 // Speed selection
@@ -1030,7 +1137,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
 
                      // Unified Cloud Streaming Panel (YouTube & SoundCloud)
                     item {
-                        var streamingPlatform by remember { mutableStateOf("youtube") } // "youtube" or "soundcloud"
+                        var streamingPlatform by remember { mutableStateOf("soundcloud") } // "youtube" or "soundcloud"
                         
                         var youtubeUrlOrId by remember { mutableStateOf("") }
                         var isVideoMode by remember { mutableStateOf(false) } // false = audio only, true = video
@@ -1047,6 +1154,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
 
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
                             // Sliding custom segmented toggle between YouTube and SoundCloud
+                            if (false)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1097,7 +1205,7 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                 }
                             }
 
-                            if (streamingPlatform == "youtube") {
+                            if (false) {
                                 // YouTube Mode content
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1707,10 +1815,6 @@ fun GlassPlayerApp(viewModel: PlayerViewModel) {
                                             )
                                         }
                                     }
-                                }
-                            } else {
-                                if (selectedPlaylistTab == "cloud") {
-                                    selectedPlaylistTab = "all"
                                 }
                             }
 
